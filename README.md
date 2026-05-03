@@ -403,9 +403,10 @@ by default. Run the following and observe what happens:
 
 > *Your answer:*
 >
-> Error: FOREIGN KEY constraint failed
+```
+Error: FOREIGN KEY constraint failed
 A constraint written in the DDL is merely a statement of intent. For it to truly protect data, the engine must verify it with every modification. In SQLite, this verification is disabled by default for historical compatibility reasons (versions prior to 3.6.19 did not support foreign keys; to avoid breaking existing databases, enforcement remains opt-in). A rigorous schema is therefore useless if the application code omits the PRAGMA foreign_keys = ON statement. In PostgreSQL, MySQL/InnoDB, or Oracle, foreign keys are enabled by default, and this pitfall does not exist.
-
+```
 ---
 
 ## 3 – Insert Sample Data
@@ -699,8 +700,9 @@ INSERT INTO writes VALUES (1, '978-0-201-96426-4');
 >
 > *Your answer:*
 >
-> Yes, and writes is a good theoretical example: the combination (author_id, isbn) is the only candidate key here because they are the only two attributes and they are both necessary (neither is sufficient on its own in the presence of N:M).
-
+```
+Yes, and writes is a good theoretical example: the combination (author_id, isbn) is the only candidate key here because they are the only two attributes and they are both necessary (neither is sufficient on its own in the presence of N:M).
+```
 ---
 
 ## 6 – Schema Diagrams as Code (Connection to DBMS_02)
