@@ -660,9 +660,11 @@ VALUES (999, 1, '2026-05-01');
 >
 > *Your answer:*
 >
-> Result: sqlite3.IntegrityError: FOREIGN KEY constraint failed
+```
+Result: sqlite3.IntegrityError: FOREIGN KEY constraint failed
 
 The FOREIGN KEY constraint (member_no) REFERENCES member(member_no) of the loan table failed. Member 999 does not exist in member, so the insertion violates referential integrity. SQLite does not specify the exact foreign key in its error message (this is a historical weakness of the engine), but we can deduce it because copy_no = 1 exists (a copy is present) — it must be member_no that is causing the problem. PostgreSQL would have specified: Key (member_no)=(999) is not present in table "member".
+```
 
 ### Task 5b – Delete a member with active loans
 
@@ -680,8 +682,9 @@ DELETE FROM member WHERE member_no = 102;
 >
 > *Your answer:*
 >
-> With ON DELETE CASCADE on loan.member_no, the DELETE FROM member WHERE member_no = 102 would succeed silently, and all loan lines referencing Schneider would be cascaded down — including the currently open loan 2 on copy 3.
-
+```
+With ON DELETE CASCADE on loan.member_no, the DELETE FROM member WHERE member_no = 102 would succeed silently, and all loan lines referencing Schneider would be cascaded down — including the currently open loan 2 on copy 3.
+```
 ### Task 5c – Verify the composite primary key of `writes`
 
 ```sql
