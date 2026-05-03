@@ -660,10 +660,8 @@ VALUES (999, 1, '2026-05-01');
 > foreign key column involved.
 >
 > *Your answer:*
->
 ```
 Result: sqlite3.IntegrityError: FOREIGN KEY constraint failed
-
 The FOREIGN KEY constraint (member_no) REFERENCES member(member_no) of the loan table failed. Member 999 does not exist in member, so the insertion violates referential integrity. SQLite does not specify the exact foreign key in its error message (this is a historical weakness of the engine), but we can deduce it because copy_no = 1 exists (a copy is present) — it must be member_no that is causing the problem. PostgreSQL would have specified: Key (member_no)=(999) is not present in table "member".
 ```
 
@@ -682,7 +680,6 @@ DELETE FROM member WHERE member_no = 102;
 > for a library system? Justify your answer.
 >
 > *Your answer:*
->
 ```
 With ON DELETE CASCADE on loan.member_no, the DELETE FROM member WHERE member_no = 102 would succeed silently, and all loan lines referencing Schneider would be cascaded down — including the currently open loan 2 on copy 3.
 ```
@@ -699,7 +696,6 @@ INSERT INTO writes VALUES (1, '978-0-201-96426-4');
 > an example from the library schema.
 >
 > *Your answer:*
->
 ```
 Yes, and writes is a good theoretical example: the combination (author_id, isbn) is the only candidate key here because they are the only two attributes and they are both necessary (neither is sufficient on its own in the presence of N:M).
 ```
