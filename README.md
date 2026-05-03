@@ -53,6 +53,9 @@ git --version
 > checks and insert it here.
 >
 > `[insert screenshot]`
+>
+> <img width="638" height="439" alt="Capture d’écran 2026-05-03 à 15 28 03" src="https://github.com/user-attachments/assets/220df76d-adfb-44da-aea1-a88fc83a74d9" />
+
 
 ---
 
@@ -176,6 +179,11 @@ Complete the sketch for all six relations (`author`, `book`, `writes`, `copy`,
 > single column of `book`?
 >
 > *Your answer:*
+>
+> The relational model only allows atomic values ​​in each cell (1NF). Storing multiple author_ids in a single column of book (e.g., "1,2,3" or an array type) would violate this rule and make it impossible to:declare a foreign key to author (a foreign key can only point to a unique identifier, not a substring) — referential integrity collapses;
+perform an efficient join between authors and books (the string would need to be parsed, preventing the use of any B-tree index);
+perform simple queries like "how many books has author 2 written?" which would require textual pattern matching instead of a COUNT.
+The table writes(author_id, isbn) solves all these problems by representing each edge of the N:M relationship with an atomic row, with two properly declared foreign keys and a composite primary key that prevents duplicates.
 
 > **Question 1.2:** `loan_id` is a surrogate key even though a loan might seem
 > to be uniquely identified by `(member_no, copy_no, loan_date)`. Name one
@@ -183,6 +191,10 @@ Complete the sketch for all six relations (`author`, `book`, `writes`, `copy`,
 > key.
 >
 > *Your answer:*
+> The triplet (member_no, copy_no, loan_date) seems sufficient, but it fails in several realistic scenarios:Two loans of the same copy on the same day. A member borrows a book, returns it late morning, then borrows it again in the afternoon (for example, because they forgot to take a note). The three columns would have the same value on two different rows — a key collision.
+Date granularity. loan_date is typed DATE, not DATETIME. Even if we switch to DATETIME, two transactions recorded in the same second by the cash register system would pose the same problem.
+Stability. A composite event key is fragile: if the library decides tomorrow to add a dimension (branch, employee who recorded the loan), the primary key must be migrated. A loan_id substitution key is immutable and independent of business rules.
+A numeric substitution key avoids all these pitfalls and keeps the foreign keys of other tables (should a granular table referencing a loan ever exist) compact.
 
 ---
 
@@ -294,6 +306,8 @@ sqlite3 library.db < schema.sql
 > output and insert it here.
 >
 > `[insert screenshot]`
+> <img width="682" height="581" alt="Capture d’écran 2026-05-03 à 16 26 36" src="https://github.com/user-attachments/assets/1e924ca5-4e08-4dd3-9eac-54cb5ac00778" />
+
 
 ### Task 2c – Commit
 
@@ -347,11 +361,24 @@ git log --oneline
 author who has written at least one book in the catalogue?
 
 > *Your answer:*
+>
+>When a librarian tries to delete an author who has at least one entry in writes, the query fails with FOREIGN KEY constraint failed and the deletion is rolled back. In practice, to truly delete the author, the librarian must first: either delete all entries in writes that reference them (and possibly all copies/orphaned books),or reassign the books to another author.
+This is exactly the desired behavior: the record of a book being written by someone is never silently lost.
 
 **Question 2.2:** `email` in `member` is declared `UNIQUE` but is not the
 primary key. Using the vocabulary from Lecture 03, what kind of key is it?
 
 > *Your answer:*
+> 
+>email is an alternate candidate key (Reading 03, sometimes called an alternate key in English or Alternativschlüssel in German). It satisfies the two conditions of a candidate key:
+Uniqueness: declared by the UNIQUE constraint.
+Non-redundancy: only one attribute, therefore trivially minimal.
+But it is not the primary key: we chose member_no because it is shorter (an INTEGER vs. a variable-length string), more stable (a member can change their email, but their member_no never can), and performs better for joins.
+Complete vocabulary:
+Superkey = a set of attributes that uniquely identify a row (e.g., {member_no, full_name}).
+Candidate key = minimal superkey (no sub-part is yet a superkey).
+Primary key = the candidate key designated as the main identifier.
+Alternate key = any other candidate key, such as email here.
 
 **Question 2.3:** SQLite does not enforce `CHECK` or `FOREIGN KEY` constraints
 by default. Run the following and observe what happens:
@@ -375,6 +402,9 @@ by default. Run the following and observe what happens:
 > at runtime?
 
 > *Your answer:*
+>
+> Error: FOREIGN KEY constraint failed
+A constraint written in the DDL is merely a statement of intent. For it to truly protect data, the engine must verify it with every modification. In SQLite, this verification is disabled by default for historical compatibility reasons (versions prior to 3.6.19 did not support foreign keys; to avoid breaking existing databases, enforcement remains opt-in). A rigorous schema is therefore useless if the application code omits the PRAGMA foreign_keys = ON statement. In PostgreSQL, MySQL/InnoDB, or Oracle, foreign keys are enabled by default, and this pitfall does not exist.
 
 ---
 
@@ -470,6 +500,10 @@ SQL:
 
 ```sql
 -- write your query here
+
+SELECT *
+FROM   copy
+WHERE  shelf_loc LIKE 'A%';
 ```
 
 > Expected result: copy\_no 1 and 2.
@@ -485,6 +519,9 @@ SQL:
 
 ```sql
 -- write your query here
+
+SELECT title, pub_year
+FROM   book;
 ```
 
 > Expected result: three rows, two columns each.
@@ -501,6 +538,10 @@ SQL:
 
 ```sql
 -- write your query here
+
+SELECT isbn, shelf_loc
+FROM   copy
+WHERE  shelf_loc >= 'B';
 ```
 
 > Expected result: copy\_no 3 (B-07) and copy\_no 4 (C-12).
@@ -522,6 +563,14 @@ SQL:
 
 ```sql
 -- write your query here
+
+SELECT m.full_name,
+       b.title
+FROM   loan   AS l
+JOIN   member AS m ON l.member_no = m.member_no
+JOIN   copy   AS c ON l.copy_no   = c.copy_no
+JOIN   book   AS b ON c.isbn      = b.isbn
+WHERE  l.return_date IS NULL;
 ```
 
 > Expected result: two rows – Schneider borrowing *Database Management Systems*,
@@ -552,6 +601,8 @@ condition into `WHERE return_date IS NULL`? Why? Refer to the formal definition
 of the outer join from Lecture 03.
 
 > *Your answer:*
+>
+> Any condition relating to the right-hand table of a LEFT JOIN must be placed in the ON clause. In the WHERE clause, only allow conditions relating to the left-hand table, or conditions explicitly compatible with NULL (IS NULL / IS NOT NULL), and only when you actually want to filter out synthetic rows. This rule avoids the anti-pattern entirely, without having to reason on a case-by-case basis.
 
 ### Task 4f – Set Difference
 
@@ -566,6 +617,14 @@ In SQL, set difference is expressed with `EXCEPT`:
 
 ```sql
 -- write your query here
+
+SELECT b.isbn, b.title
+FROM   book AS b
+WHERE  b.isbn NOT IN (
+    SELECT c.isbn
+    FROM   copy AS c
+    JOIN   loan AS l ON c.copy_no = l.copy_no
+);
 ```
 
 > Expected result: *The C Programming Language* (copy 4 was never loaned).
@@ -600,6 +659,10 @@ VALUES (999, 1, '2026-05-01');
 > foreign key column involved.
 >
 > *Your answer:*
+>
+> Result: sqlite3.IntegrityError: FOREIGN KEY constraint failed
+
+The FOREIGN KEY constraint (member_no) REFERENCES member(member_no) of the loan table failed. Member 999 does not exist in member, so the insertion violates referential integrity. SQLite does not specify the exact foreign key in its error message (this is a historical weakness of the engine), but we can deduce it because copy_no = 1 exists (a copy is present) — it must be member_no that is causing the problem. PostgreSQL would have specified: Key (member_no)=(999) is not present in table "member".
 
 ### Task 5b – Delete a member with active loans
 
@@ -616,6 +679,8 @@ DELETE FROM member WHERE member_no = 102;
 > for a library system? Justify your answer.
 >
 > *Your answer:*
+>
+> With ON DELETE CASCADE on loan.member_no, the DELETE FROM member WHERE member_no = 102 would succeed silently, and all loan lines referencing Schneider would be cascaded down — including the currently open loan 2 on copy 3.
 
 ### Task 5c – Verify the composite primary key of `writes`
 
@@ -630,6 +695,8 @@ INSERT INTO writes VALUES (1, '978-0-201-96426-4');
 > an example from the library schema.
 >
 > *Your answer:*
+>
+> Yes, and writes is a good theoretical example: the combination (author_id, isbn) is the only candidate key here because they are the only two attributes and they are both necessary (neither is sufficient on its own in the presence of N:M).
 
 ---
 
@@ -735,6 +802,9 @@ If you have not used `scp` before, work through this exercise first:
 > and all five relationships, and insert it here.
 >
 > `[insert screenshot]`
+>
+> <img width="1004" height="886" alt="Capture d’écran 2026-05-03 à 17 31 20" src="https://github.com/user-attachments/assets/33cef9c2-5421-485a-ab07-91abfd887b02" />
+
 
 Add `schema.svg` to `.gitignore` (it is generated, not authored):
 
@@ -779,6 +849,11 @@ reorder these joins freely. Under what condition would reordering a join change
 the *result* of a query? Under what condition is it always safe?
 
 > *Your answer:*
+>
+> The natural join (and equi-join) is: Commutative: R ⋈ S = S ⋈ R (the order of the operands does not affect the result).
+Associative: (R ⋈ S) ⋈ T = R ⋈ (S ⋈ T), provided that all joins are inner joins.Outer join. (A ⟕ B) ⋈ C ≠ A ⟕ (B ⋈ C) in general. The LEFT OUTER join produces NULL values ​​for unpaired rows in A, and the subsequent inner join can eliminate these synthetic rows. This is precisely the pitfall of question 4.1.
+Non-equijoin join conditions. With inequality conditions (R.x < S.y), associativity still holds, but the optimizer has far fewer usable index options. Presence of aggregation in the middle. A join followed by a GROUP BY produces a particular multiset; moving the join can change the cardinality.
+These properties form the basis of the query optimizer: it can choose the order that minimizes the size of the intermediate results, since the final result is mathematically identical.
 
 **Question B – NULL semantics:**  
 `return_date` is `NULL` for an open loan. `NULL` in SQL does not mean zero or
@@ -787,6 +862,10 @@ Will it return the open loans? Explain why or why not and write the correct
 form.
 
 > *Your answer:*
+>
+> WHERE return_date = NULL always returns zero rows, regardless of the database state.
+
+Why? SQL uses a three-value logic: TRUE, FALSE, UNKNOWN. Any comparison involving NULL (including NULL = NULL) produces UNKNOWN, because NULL means "unknown value," and you cannot compare two unknowns. The WHERE clause only retains a row if its predicate is strictly TRUE—therefore, it rejects UNKNOWN just like FALSE.
 
 **Question C – Surrogate vs. natural key:**  
 `book` uses `isbn` as its natural primary key; all other entities use surrogate
@@ -795,6 +874,19 @@ integer keys. Suppose the library occasionally receives books without an ISBN
 primary key? What design change would you make?
 
 > *Your answer:*
+>
+> The ISBN TEXT PRIMARY KEY NOT NULL prevents the insertion of a manuscript without an ISBN. Since the primary key is NOT NULL by definition, you can't even use NULL as a placeholder. Furthermore, inventing a fake ISBN ("INTERNAL-001") corrupts the field's semantics and could potentially collide with a real ISBN one day.
+>
+> The substitution key book_id INTEGER PRIMARY KEY, ISBN becomes a UNIQUE NULLABLE attribute.
+> CREATE TABLE book (
+       book_id  INTEGER PRIMARY KEY,
+       isbn     TEXT    UNIQUE,        -- nullable
+       title    TEXT    NOT NULL,
+       pub_year INTEGER NOT NULL
+   );
+>
+> Keep the ISBN as the primary key and synthesize an internal identifier. For example, use a prefix LIB- followed by a counter: LIB-2026-00001. This is a quick solution to implement, but it pollutes the ISBN field with non-standard values, breaking imports/exports and third-party tools (WorldCat, Goodreads, etc.). It should be avoided in practice.
+Two separate tables (published_book, unpublished_book). On paper, this is clean (one type for real ISBNs, another for manuscripts); in practice, it's a nightmare because the foreign keys for copy, writes, and loan must now reference a union—impossible without triggers or an artificial parent table.
 
 **Question D – Relational algebra limitations:**  
 Suppose the library wants to find all members who have borrowed the same copy
@@ -805,11 +897,31 @@ What does this tell you about the relationship between relational algebra and
 SQL?
 
 > *Your answer:*
+>
+> Renaming one copy of `loan` to `l1` and another to `l2`: ρ.
+Cartesian product: ×.
+
+Selecting `l1.member_no = l2.member_no` ∧ `l1.copy_no = l2.copy_no` ∧ `l1.loan_id < l2.loan_id`: σ.
+
+Projecting `(member_no, copy_no)`: π.
+
+Basic relational algebra naturally handles multisets if we follow the "pure set theory" definition (projection eliminates duplicates). No aggregation is needed.
+
+But the COUNT > 1 version does NOT allow this. Basic relational algebra does not have aggregation. COUNT, SUM, AVG, MAX, MIN, and GROUP BY are extensions added by Codd himself (extended relational algebra) and later standardized by SQL.
+
+Basic algebra is relationally complete: it can express any purely set-theoretic query on relations. This is Codd's central theorem (1972).
+
+But SQL is strictly more expressive because it allows aggregation, sorting (ORDER BY), recursive queries (WITH RECURSIVE), analytic windows (OVER (PARTITION BY …)), and NULL values ​​with their trivalued logic. None of these features are present in basic algebra.
+
+This is why we speak of "extended relational algebra" in practice—basic algebra is a remarkable educational tool but insufficient for real-world business needs.
 
 > **Screenshot 4:** Take a screenshot of your terminal showing the output of
 > the query from Task 4d (the join across four relations), and insert it here.
 >
 > `[insert screenshot]`
+>
+> <img width="682" height="483" alt="Capture d’écran 2026-05-03 à 17 56 47" src="https://github.com/user-attachments/assets/3aa6e0b4-328c-43d5-8952-1078ddef10a4" />
+
 
 ---
 
@@ -818,6 +930,8 @@ SQL?
 1. **Third normal form check:** Is the `copy` relation in 3NF? Identify all
    functional dependencies and check whether any non-key attribute transitively
    depends on a non-key attribute.
+   > *Your answer:*
+   >copy is in 3NF (and even in BCNF, because the only non-trivial DF has copy_no on the left, which is a superkey).
 
 2. **Index experiment:** Load 10 000 rows into `loan` using a script that
    generates random (but valid) `member_no` and `copy_no` values. Time the
@@ -830,13 +944,36 @@ SQL?
 
    Use SQLite's `.timer ON` to measure. Report the difference.
 
+   .timer ON
+   
+    ```sql
+    CREATE INDEX idx_loan_member ON loan(member_no);
+    SELECT * FROM loan WHERE member_no = 101;
+    -- Run Time: real 0.001  user 0.001  sys 0.000     (with index)
+    ```
+
 3. **Recursive CTE:** The library wants to know the "borrow chain" – if
    member A borrowed a copy and then member B borrowed the same copy after A,
    and then C after B, output all such chains of length ≥ 2 for any copy.
    This requires ordering loans by `loan_date` per copy. Write the query; you
    may need a window function or a self-join.
 
-4. **GitHub Actions:** Add a workflow (`.github/workflows/release.yml`) that:
+   ```sql
+   WITH ordered AS (
+    SELECT copy_no,
+           member_no,
+           loan_date,
+           LAG(member_no) OVER (PARTITION BY copy_no ORDER BY loan_date) AS        prev_member
+    FROM   loan
+    )
+    SELECT copy_no, prev_member AS first_borrower, member_no AS next_borrower,     loan_date
+    FROM   ordered
+   WHERE  prev_member IS NOT NULL
+   AND  prev_member <> member_no
+   ORDER  BY copy_no, loan_date;
+```
+
+5. **GitHub Actions:** Add a workflow (`.github/workflows/release.yml`) that:
    - Installs PlantUML
    - Renders `schema.puml` to `schema.svg`
    - Publishes a GitHub Release with `schema.svg` attached on every `v*` tag
